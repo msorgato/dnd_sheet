@@ -1,0 +1,64 @@
+{
+  "spells": [
+    {
+      "id": "luce",
+      "name": "Luce",
+      "level": 0,
+      "school": "Evocazione",
+      "castingTime": "1 azione",
+      "range": "Contatto",
+      "components": "V, M (una lucciola o muschio fosforescente)",
+      "duration": "1 ora",
+      "description": "Tocchi un oggetto che non indossa né porta nessuno; l'oggetto emette luce vivida in un raggio di 6 metri.",
+      "classes": ["mago"]
+    },
+    {
+      "id": "scudo",
+      "name": "Scudo",
+      "level": 1,
+      "school": "Abiurazione",
+      "castingTime": "1 reazione",
+      "range": "Personale",
+      "components": "V, S",
+      "duration": "1 round",
+      "description": "Una barriera invisibile di forza magica ti protegge, conferendoti +5 alla CA fino all'inizio del tuo prossimo turno.",
+      "classes": ["mago"]
+    },
+    {
+      "id": "dardo-incantato",
+      "name": "Dardo Incantato",
+      "level": 1,
+      "school": "Evocazione",
+      "castingTime": "1 azione",
+      "range": "36 metri",
+      "components": "V, S",
+      "duration": "Istantanea",
+      "description": "Crei tre dardi di forza magica scintillante; ogni dardo colpisce automaticamente una creatura a tua scelta e infligge 1d4+1 danni da forza.",
+      "classes": ["mago"]
+    },
+    {
+      "id": "cura-ferite",
+      "name": "Cura Ferite",
+      "level": 1,
+      "school": "Evocazione",
+      "castingTime": "1 azione",
+      "range": "Contatto",
+      "components": "V, S",
+      "duration": "Istantanea",
+      "description": "Una creatura che tocchi recupera un numero di punti ferita pari a 1d8 + il tuo modificatore dell'abilità da lanciaincantesimi.",
+      "classes": []
+    },
+    {
+      "id": "palla-di-fuoco",
+      "name": "Palla di Fuoco",
+      "level": 3,
+      "school": "Evocazione",
+      "castingTime": "1 azione",
+      "range": "45 metri",
+      "components": "V, S, M (una piccola sfera di sterco di pipistrello e zolfo)",
+      "duration": "Istantanea",
+      "description": "Un lampo brillante parte dal tuo dito e si espande in una sfera di fuoco di 6 metri di raggio, infliggendo 8d6 danni da fuoco (metà con tiro salvezza su Destrezza superato).",
+      "classes": ["mago"]
+    }
+  ]
+}

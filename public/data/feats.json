@@ -1,0 +1,40 @@
+{
+  "feats": [
+    {
+      "id": "sveglio",
+      "name": "Sveglio",
+      "description": "Sei sempre all'erta per il pericolo.",
+      "category": "origin",
+      "benefit": "Non puoi essere colto alla sprovvista mentre sei cosciente. Inoltre, altre creature non ottengono vantaggio ai tiri per colpirti a causa dell'essere invisibili a te."
+    },
+    {
+      "id": "duro-a-morire",
+      "name": "Duro a Morire",
+      "description": "Sei più resistente della media.",
+      "category": "origin",
+      "benefit": "I tuoi punti ferita massimi aumentano di 2 per ogni tuo livello."
+    },
+    {
+      "id": "iniziato-alla-magia",
+      "name": "Iniziato alla Magia",
+      "description": "Hai appreso i rudimenti della magia arcana, divina o primordiale.",
+      "category": "origin",
+      "benefit": "Impari un trucchetto e un incantesimo di 1° livello da una lista a tua scelta; puoi lanciare l'incantesimo di 1° livello una volta senza spendere uno slot, recuperando l'uso dopo un riposo lungo."
+    },
+    {
+      "id": "attaccante-selvaggio",
+      "name": "Attaccante Selvaggio",
+      "description": "Colpisci con ferocia brutale.",
+      "category": "origin",
+      "benefit": "Quando ottieni un danno da un'arma da mischia, puoi tirare due volte il dado del danno e usare il risultato più alto."
+    },
+    {
+      "id": "atleta",
+      "name": "Atleta",
+      "description": "Ti sei allenato per raggiungere l'apice della forma fisica.",
+      "category": "general",
+      "prerequisites": "Punteggio di Forza o Destrezza pari ad almeno 13",
+      "benefit": "Aumenta di 1 il punteggio di Forza o Destrezza (max 20). Alzarti da terra ti costa solo 1,5 metri di movimento anziché metà."
+    }
+  ]
+}
