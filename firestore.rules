@@ -32,10 +32,28 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/lobbies/$(lobbyId)).data.get('gmUid', '') == request.auth.uid;
     }
 
-    // ── Dati utente (personaggi, impostazioni, rateLimits, bozze classi custom) ──
+    // Anti-flood chat: max 10 messaggi ogni 60s, contati su lobbies/{lobbyId}/members/{uid}.
+    // Limite "debole": valida solo l'aritmetica di un aggiornamento onesto del contatore,
+    // non può obbligare un client a includerlo — un client modificato può ometterlo.
+    function messageRateLimitOk(lobbyId, uid) {
+      let m = get(/databases/$(database)/documents/lobbies/$(lobbyId)/members/$(uid)).data;
+      return !('msgWindowStart' in m)
+        || request.time > m.msgWindowStart + duration.value(60, 's')
+        || m.msgCount < 10;
+    }
+
+    function isValidThrottleCounterUpdate() {
+      let windowExpired = !('msgWindowStart' in resource.data)
+        || request.time > resource.data.msgWindowStart + duration.value(60, 's');
+      return windowExpired
+        ? (request.resource.data.msgCount == 1 && request.resource.data.msgWindowStart == request.time)
+        : (request.resource.data.msgCount == resource.data.msgCount + 1
+            && request.resource.data.msgWindowStart == resource.data.msgWindowStart);
+    }
+
+    // ── Dati utente (personaggi, impostazioni, bozze classi custom) ──────────
     // Ogni utente può leggere e scrivere solo i propri dati.
     // Copre anche users/{uid}/customClasses/{classId} (bozze classi custom admin).
-    // La Cloud Function usa Admin SDK e bypassa questa regola per scrivere rateLimits e audit_log.
 
     match /users/{uid}/{document=**} {
       allow read, write: if isOwner(uid);
@@ -51,11 +69,27 @@ service cloud.firestore {
     }
 
     // ── Audit log ─────────────────────────────────────────────────────────────
-    // Solo admin può leggere; nessun client può scrivere (solo Cloud Functions con Admin SDK).
+    // Solo admin può leggere. Scrittura diretta dal client (niente Cloud Functions):
+    // solo create (mai update/delete), performedBy deve coincidere con l'autore della
+    // richiesta, e timestamp deve essere il timestamp del server (impedisce di falsificare
+    // la data). Azioni di libreria: solo admin. Auto-cancellazione account: chiunque, ma
+    // solo con se stesso come target.
 
-    match /audit_log/{document=**} {
+    match /audit_log/{entryId} {
       allow read: if isAdmin();
-      allow write: if false;
+
+      allow create: if isAuthenticated()
+        && request.resource.data.performedBy == request.auth.uid
+        && request.resource.data.timestamp == request.time
+        && request.resource.data.keys().hasOnly(['action', 'performedBy', 'targetId', 'targetCollection', 'timestamp'])
+        && (
+          (isAdmin()
+            && request.resource.data.action in ['library.created', 'library.updated', 'library.deleted'])
+          || (request.resource.data.action == 'account.deleted'
+              && request.resource.data.targetId == request.auth.uid)
+        );
+
+      allow update, delete: if false;
     }
 
     // ── Lobby ─────────────────────────────────────────────────────────────────
@@ -88,7 +122,9 @@ service cloud.firestore {
 
         allow update: if isAuthenticated()
           && memberId == request.auth.uid
-          && request.resource.data.displayName.size() <= 40;
+          && request.resource.data.displayName.size() <= 40
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['msgCount', 'msgWindowStart'])
+              || isValidThrottleCounterUpdate());
 
         allow delete: if isAuthenticated()
           && (memberId == request.auth.uid || isLobbyOwner(lobbyId));
@@ -105,6 +141,7 @@ service cloud.firestore {
           && request.resource.data.content.size() > 0
           && request.resource.data.content.size() <= 2000
           && get(/databases/$(database)/documents/lobbies/$(lobbyId)).data.isActive == true
+          && messageRateLimitOk(lobbyId, request.auth.uid)
           && (!('hidden' in request.resource.data)
               || request.resource.data.hidden == false
               || isLobbyGM(lobbyId));

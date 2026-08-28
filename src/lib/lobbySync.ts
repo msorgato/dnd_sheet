@@ -162,6 +162,14 @@ export async function leaveLobby(uid: string, lobbyId: string): Promise<void> {
   await Promise.all([deleteDoc(memberDoc(lobbyId, uid)), deleteDoc(membershipDoc(uid, lobbyId))])
 }
 
+/** Rimuove l'utente da tutte le lobby di cui è membro (usato nella cancellazione account). */
+export async function leaveAllLobbies(uid: string): Promise<void> {
+  const membershipSnap = await getDocs(membershipsCol(uid))
+  await Promise.all(
+    membershipSnap.docs.map((d) => Promise.all([deleteDoc(memberDoc(d.id, uid)), deleteDoc(membershipDoc(uid, d.id))])),
+  )
+}
+
 export async function closeLobby(uid: string, lobbyId: string): Promise<void> {
   const snap = await getDoc(lobbyDoc(lobbyId))
   if (!snap.exists()) throw new Error('Lobby non trovata.')
@@ -169,6 +177,10 @@ export async function closeLobby(uid: string, lobbyId: string): Promise<void> {
   if (lobby.ownerId !== uid) throw new Error('Solo il proprietario può chiudere la lobby.')
   await updateDoc(lobbyDoc(lobbyId), { isActive: false })
 }
+
+// Deve restare in sincrono con la durata usata da messageRateLimitOk in firestore.rules
+// e con RATE_LIMIT_WINDOW_MS in ChatPanel (verifica lato client, solo UX).
+const RATE_LIMIT_WINDOW_MS = 60_000
 
 export async function sendMessage(
   uid: string,
@@ -198,6 +210,18 @@ export async function sendMessage(
   if (hidden) payload.hidden = true
 
   await addDoc(messagesCol(lobbyId), payload)
+
+  // Aggiorna il contatore anti-flood sul proprio member doc (limite "debole": le regole
+  // Firestore validano l'aritmetica di questo aggiornamento, ma non possono obbligare un
+  // client a inviarlo — vedi commento su messageRateLimitOk in firestore.rules).
+  const memberData = mSnap.data() as { msgCount?: number; msgWindowStart?: unknown }
+  const windowExpired = !memberData.msgWindowStart || Date.now() - tsToMs(memberData.msgWindowStart) >= RATE_LIMIT_WINDOW_MS
+  await updateDoc(
+    memberDoc(lobbyId, uid),
+    windowExpired
+      ? { msgCount: 1, msgWindowStart: serverTimestamp() }
+      : { msgCount: (memberData.msgCount ?? 0) + 1 },
+  )
 }
 
 export async function transferGMRole(uid: string, lobbyId: string, targetUid: string): Promise<void> {

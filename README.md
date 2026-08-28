@@ -52,7 +52,7 @@ Per provare l'app senza creare un progetto Firebase, usa gli emulatori locali di
 4. Vai su `http://localhost:5173/login` e clicca "Accedi con Google": l'emulatore Auth intercetta la richiesta e mostra una UI locale per creare un utente di test fittizio (nessuna credenziale reale necessaria).
 5. Per diventare admin (necessario per il pannello `/admin`), crea manualmente il documento `users/{tuo-uid}/settings/profile` con `{ role: 'admin' }` dalla UI Firestore dell'emulatore (`http://127.0.0.1:4000/firestore`).
 
-Le Cloud Functions (`auditLog`, `deleteUserAccount`, `throttleMessages`) non sono incluse in questo setup minimale: richiedono l'emulatore Functions, non ancora configurato in questa fase.
+Audit log, cancellazione account e limite anti-flood dei messaggi sono implementati interamente lato client + regole di sicurezza Firestore (nessuna Cloud Function, per restare sul piano gratuito Spark). Il limite anti-flood è "debole": impedisce l'uso normale/accidentale ma non un client modificato che ometta l'aggiornamento del proprio contatore (vedi commenti in `firestore.rules`).
 
 ## Script disponibili
 
@@ -78,7 +78,7 @@ I test in `tests/firestore.rules.test.ts` usano `@firebase/rules-unit-testing` c
 
 ## Hosting
 
-Il frontend è pensato per essere ospitato su **Vercel** (SPA, rewrite verso `index.html`), mentre **Firebase** fornisce Authentication, Firestore e le Cloud Functions in `functions/`. Repository GitHub: `msorgato/dnd_sheet`.
+Il frontend è pensato per essere ospitato su **Vercel** (SPA, rewrite verso `index.html`), mentre **Firebase** fornisce Authentication e Firestore (piano gratuito Spark, nessuna Cloud Function). Repository GitHub: `msorgato/dnd_sheet`.
 
 ## Stato del contenuto di gioco
 

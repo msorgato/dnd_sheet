@@ -36,7 +36,7 @@ Solo 2-3 specie, 2-3 classi base, una manciata di talenti/incantesimi di esempio
 **Alternative considerate**: bloccare la change finché l'utente non fornisce i dati completi. Scartata perché l'utente ha esplicitamente chiesto di "predisporre i modelli" nel frattempo, disaccoppiando lo scaffold architetturale dal popolamento dati.
 
 ### 4. Parità funzionale completa v1 (lobby, chat, admin, audit, GDPR)
-Replichiamo l'intera superficie funzionale di `pathfinder_sheet` fin da questa change, invece di partire da un MVP ridotto, come da scelta esplicita dell'utente. Le regole Firestore ricalcano la struttura del gemello: `users/{uid}/{document=**}` privato, `library/{document=**}` pubblico in lettura/admin in scrittura, `lobbies/{lobbyId}` con sottocollezioni `members`/`messages` e ruoli owner/GM/member, `audit_log/{document=**}` scrivibile solo da Cloud Functions (Admin SDK).
+Replichiamo l'intera superficie funzionale di `pathfinder_sheet` fin da questa change, invece di partire da un MVP ridotto, come da scelta esplicita dell'utente. Le regole Firestore ricalcano la struttura del gemello: `users/{uid}/{document=**}` privato, `library/{document=**}` pubblico in lettura/admin in scrittura, `lobbies/{lobbyId}` con sottocollezioni `members`/`messages` e ruoli owner/GM/member, `audit_log/{document=**}` in lettura solo admin. Diversamente dal gemello (che usa Cloud Functions con Admin SDK per audit log, cancellazione account e throttling), qui queste tre funzionalità sono implementate senza Cloud Functions — vedi Decisione 7.
 **Alternative considerate**: MVP con sola scheda personaggio. Scartata su indicazione esplicita dell'utente in fase di chiarimento.
 
 ### 5. Tema "a dominante rossa" come nuova variante indipendente
@@ -44,8 +44,16 @@ Nuovo tema di default (nome da definire in fase di implementazione, es. `crimson
 **Alternative considerate**: riusare il tema `blood` di `pathfinder_sheet` tale quale. Scartata perché i due progetti sono indipendenti (nessuna dipendenza di codice condivisa) e l'utente ha chiesto una palette "lievemente diversa", non identica.
 
 ### 6. Hosting: Vercel per il frontend, Firebase per backend-as-a-service
-Stessa separazione del gemello: `vercel.json` con rewrite SPA per il frontend statico; `firebase.json` limitato a Firestore rules + Cloud Functions (niente Firebase Hosting). Progetti Firebase e Vercel nuovi e indipendenti da quelli di `pathfinder_sheet`.
+Stessa separazione del gemello: `vercel.json` con rewrite SPA per il frontend statico; `firebase.json` limitato a Firestore rules (niente Firebase Hosting, niente Cloud Functions — vedi Decisione 7). Progetti Firebase e Vercel nuovi e indipendenti da quelli di `pathfinder_sheet`.
 **Alternative considerate**: Firebase Hosting invece di Vercel. Scartata per coerenza con il gemello e perché l'utente ha chiesto esplicitamente entrambe le piattaforme (Vercel per hosting frontend, Firebase per i servizi backend).
+
+### 7. Decisione presa a posteriori: niente Cloud Functions, niente piano Blaze
+Dopo aver creato il progetto Firebase (`dnd-sheet-2026`) e verificato che il deploy delle Cloud Functions richiede il piano Blaze (carta di credito registrata, anche se l'uso reale resterebbe entro la soglia gratuita), l'utente ha scelto di non attivarlo. Le tre funzionalità originariamente previste come Cloud Function con Admin SDK sono state riprogettate:
+- **Cancellazione account**: interamente lato client (`deleteUser` + pulizia Firestore via SDK client), permessa dalle regole esistenti su `users/{uid}/{document=**}` senza modifiche. Nessuna perdita di garanzie.
+- **Audit log**: scrittura diretta dal client, validata dalle regole (`create`-only, `performedBy` == autore della richiesta, `timestamp` == timestamp del server). Garanzia più debole di un Admin SDK trusted (un admin non può falsificare data o azioni altrui, ma il codice client stesso decide quando scrivere la voce, invece di un trigger server sempre eseguito) ma accettabile per un'app di questa scala; in compenso la scrittura combinata (libreria + audit) nello stesso flusso client evita la finestra di inconsistenza che un trigger asincrono avrebbe comunque.
+- **Anti-flood chat**: contatore per membro (`msgCount`/`msgWindowStart`) validato dalle regole Firestore. Limite noto e documentato: le regole possono validare che un aggiornamento onesto del contatore sia aritmeticamente corretto, ma non possono obbligare un client a includerlo — un client non standard può quindi bypassare il limite. Accettato perché protegge comunque dall'uso normale/accidentale dell'app, e un limite robusto richiederebbe di nuovo un componente server fidato.
+
+**Alternative considerate**: attivare il piano Blaze (il costo reale sarebbe quasi certamente €0 vista la scala hobby del progetto, ma l'utente preferisce non associare un metodo di pagamento). Scartata su scelta esplicita dell'utente.
 
 ## Risks / Trade-offs
 

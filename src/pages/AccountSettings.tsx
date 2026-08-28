@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getFunctions, httpsCallable } from 'firebase/functions'
 import { deleteUser, reauthenticateWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { useAuthStore } from '../store/authStore'
 import { auth } from '../lib/firebase'
+import { deleteAllUserData, writeAccountDeletedAuditLog } from '../lib/firestoreSync'
+import { leaveAllLobbies } from '../lib/lobbySync'
 
 type DeleteStep = 'idle' | 'confirm' | 'deleting' | 'error'
 
 export function AccountSettings() {
-  const { user, signOut } = useAuthStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
 
   const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle')
@@ -19,31 +20,31 @@ export function AccountSettings() {
     setDeleteStep('deleting')
     setDeleteError(null)
     try {
-      // Prova prima la Cloud Function (richiede piano Blaze e deploy).
-      const fn = httpsCallable(getFunctions(), 'deleteUserAccount')
-      await fn()
-      await signOut()
-    } catch (cfErr: unknown) {
-      // Cloud Function non ancora distribuita — fallback lato client.
-      const code = (cfErr as { code?: string }).code
-      if (code === 'functions/not-found' || code === 'functions/unavailable' || code === 'functions/internal') {
+      // Cancellazione interamente lato client (nessuna Cloud Function: richiederebbe il piano
+      // Blaze). Dati Firestore prima, account Auth per ultimo — così un retry dopo un fallimento
+      // a metà strada trova solo lavoro residuo da fare (le cancellazioni sono idempotenti).
+      await deleteAllUserData(user.uid)
+      await leaveAllLobbies(user.uid)
+      await writeAccountDeletedAuditLog(user.uid)
+
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('Nessun utente attivo')
+      await deleteUser(currentUser)
+      // La cancellazione dell'account innesca onAuthStateChanged → il redirect a /login avviene automaticamente.
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code
+      if (code === 'auth/requires-recent-login') {
         try {
           const currentUser = auth.currentUser
-          if (!currentUser) throw new Error('Nessun utente attivo', { cause: cfErr })
+          if (!currentUser) throw new Error('Nessun utente attivo', { cause: err })
           await reauthenticateWithPopup(currentUser, new GoogleAuthProvider())
           await deleteUser(currentUser)
-          // La cancellazione dell'account innesca onAuthStateChanged → il redirect a /login avviene automaticamente.
-        } catch (authErr: unknown) {
-          const authCode = (authErr as { code?: string }).code
-          if (authCode === 'auth/requires-recent-login') {
-            setDeleteError('Effettua di nuovo il login e riprova.')
-          } else {
-            setDeleteError((authErr as Error).message ?? "Errore durante l'eliminazione")
-          }
+        } catch (reauthErr: unknown) {
+          setDeleteError((reauthErr as Error).message ?? "Errore durante l'eliminazione")
           setDeleteStep('error')
         }
       } else {
-        setDeleteError((cfErr as Error).message ?? "Errore durante l'eliminazione")
+        setDeleteError((err as Error).message ?? "Errore durante l'eliminazione")
         setDeleteStep('error')
       }
     }

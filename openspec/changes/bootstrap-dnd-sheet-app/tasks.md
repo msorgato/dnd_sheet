@@ -43,7 +43,7 @@
 - [x] 6.2 Implementare le pagine `LobbiesPage` e `LobbyDetailPage` con visualizzazione membri e personaggi associati
 - [x] 6.3 Implementare i ruoli owner/GM/member con permessi differenziati lato client (nascondere azioni non permesse) e lato regole (vedi sezione 8)
 - [x] 6.4 Implementare la chat di lobby (`ChatPanel`, `RollMessage`) con invio messaggi e pubblicazione automatica dei risultati di lancio dado
-- [x] 6.5 Implementare la Cloud Function `throttleMessages` per limitare la frequenza di invio messaggi per utente
+- [x] 6.5 Implementare la limitazione della frequenza messaggi (10/60s) senza Cloud Function: contatore `msgCount`/`msgWindowStart` su `lobbies/{lobbyId}/members/{uid}`, aggiornato da `sendMessage` e validato da `firestore.rules` (vedi design.md Decisione 7 — limite "debole", non applicabile a un client non standard)
 - [x] 6.6 Scrivere test per lobbyStore/lobbySync (creazione, adesione, ruoli)
 
 ## 7. Amministrazione classi custom (capability: custom-class-authoring)
@@ -60,8 +60,8 @@
 
 ## 9. Conformità: audit log e diritti account (capability: account-data-rights)
 
-- [x] 9.1 Implementare la Cloud Function `auditLog` (scrittura via Admin SDK in `audit_log` per azioni admin sensibili)
-- [x] 9.2 Implementare la Cloud Function `deleteUserAccount` (cancellazione documento utente, personaggi, account Auth) con conferma esplicita lato client
+- [x] 9.1 Implementare `writeAuditLog`/`writeAccountDeletedAuditLog` in `firestoreSync.ts` (scrittura diretta client in `audit_log`, validata da `firestore.rules`: create-only, `performedBy` == autore, `timestamp` == timestamp server) — niente Cloud Function, vedi design.md Decisione 7
+- [x] 9.2 Implementare la cancellazione account interamente lato client in `AccountSettings.tsx` (`deleteAllUserData` + `leaveAllLobbies` + `writeAccountDeletedAuditLog` + `deleteUser` Auth, con re-autenticazione su `auth/requires-recent-login`) con conferma esplicita lato client
 - [x] 9.3 Aggiungere la UI di richiesta cancellazione account in `AccountSettings` con dialogo di conferma irreversibile
 
 ## 10. Tema visivo a dominante rossa (capability: app-theming)
@@ -74,12 +74,13 @@
 ## 11. Hosting e deployment
 
 - [x] 11.1 Creare `vercel.json` con rewrite SPA (`/(.*)` → `/index.html`)
-- [x] 11.2 Creare `firebase.json` con configurazione `firestore.rules` e `functions` (source `functions`, codebase `default`)
-- [x] 11.3 Inizializzare `functions/` (Node, TypeScript, `firebase-admin`, `firebase-functions`) con `index.ts` che esporta `throttleMessages`, `auditLog`, `deleteUserAccount`
-- [ ] 11.4 **[Azione manuale utente]** Creare un nuovo progetto Firebase dedicato a `dnd_sheet`, abilitare Authentication e Firestore, copiare le credenziali Web SDK in `.env`
-- [ ] 11.5 **[Azione manuale utente]** Effettuare login Firebase CLI (`firebase login`) e collegare il progetto locale (`firebase use --add`)
+- [x] 11.2 Creare `firebase.json` con configurazione `firestore.rules` (niente `functions` — vedi design.md Decisione 7)
+- [x] 11.3 ~~Inizializzare `functions/`~~ — non più applicabile: audit log, cancellazione account e anti-flood sono lato client/regole, niente Cloud Functions (niente piano Blaze)
+- [x] 11.4 Creare il progetto Firebase `dnd-sheet-2026`, abilitare Firestore (via CLI), creare la Web App e copiare le credenziali SDK in `.env`
+- [x] 11.5 Login Firebase CLI e collegamento del progetto locale (`firebase use --add`, `.firebaserc` creato)
+- [ ] 11.5b **[Azione manuale utente]** Abilitare il provider Google in Firebase Console → Authentication → Sign-in method (richiede un'email di supporto, un solo click)
 - [ ] 11.6 **[Azione manuale utente]** Creare un nuovo progetto Vercel collegato al repository GitHub `msorgato/dnd_sheet`, configurare le variabili d'ambiente `VITE_FIREBASE_*` nel pannello Vercel
-- [ ] 11.7 **[Azione manuale utente]** Eseguire il primo deploy delle Cloud Functions (`firebase deploy --only functions`) e verificare il primo deploy Vercel del frontend
+- [ ] 11.7 **[Azione manuale utente]** Verificare il primo deploy Vercel del frontend (nessun deploy Cloud Functions richiesto)
 
 ## 12. Verifica finale
 

@@ -12,7 +12,7 @@ import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest'
 import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { setDoc, getDoc, getDocs, addDoc, doc, collection } from 'firebase/firestore'
+import { setDoc, getDoc, getDocs, addDoc, updateDoc, doc, collection, serverTimestamp, Timestamp } from 'firebase/firestore'
 
 const PROJECT_ID = 'dnd-sheet-test'
 
@@ -169,7 +169,7 @@ describe('Lobby — accesso basato sull\'appartenenza', () => {
   })
 })
 
-describe('Audit log — solo lettura admin, nessuna scrittura diretta da client', () => {
+describe('Audit log — lettura solo admin, scrittura create-only con schema validato', () => {
   it('un utente admin può leggere l\'audit log', async () => {
     const adminUid = 'admin-user'
     await setupAdminUser(adminUid)
@@ -182,10 +182,162 @@ describe('Audit log — solo lettura admin, nessuna scrittura diretta da client'
     await assertFails(getDocs(collection(user.firestore(), 'audit_log')))
   })
 
-  it('nessun client, admin incluso, può scrivere direttamente nell\'audit log', async () => {
+  it('un admin può registrare un\'azione di libreria su se stesso, con timestamp del server', async () => {
     const adminUid = 'admin-user'
     await setupAdminUser(adminUid)
     const admin = testEnv.authenticatedContext(adminUid)
-    await assertFails(addDoc(collection(admin.firestore(), 'audit_log'), { action: 'test', actorId: adminUid }))
+    await assertSucceeds(
+      addDoc(collection(admin.firestore(), 'audit_log'), {
+        action: 'library.created',
+        performedBy: adminUid,
+        targetId: 'classe-1',
+        targetCollection: 'classes',
+        timestamp: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('un admin non può impersonare un altro admin come performedBy', async () => {
+    const adminUid = 'admin-user'
+    await setupAdminUser(adminUid)
+    const admin = testEnv.authenticatedContext(adminUid)
+    await assertFails(
+      addDoc(collection(admin.firestore(), 'audit_log'), {
+        action: 'library.created',
+        performedBy: 'altro-admin',
+        targetId: 'classe-1',
+        timestamp: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('un utente non admin non può registrare azioni di libreria', async () => {
+    const user = testEnv.authenticatedContext('user-regular')
+    await assertFails(
+      addDoc(collection(user.firestore(), 'audit_log'), {
+        action: 'library.created',
+        performedBy: 'user-regular',
+        targetId: 'classe-1',
+        timestamp: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('un utente qualsiasi può registrare la cancellazione del proprio account', async () => {
+    const user = testEnv.authenticatedContext('user-regular')
+    await assertSucceeds(
+      addDoc(collection(user.firestore(), 'audit_log'), {
+        action: 'account.deleted',
+        performedBy: 'user-regular',
+        targetId: 'user-regular',
+        timestamp: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('un utente non può registrare la cancellazione dell\'account di un altro', async () => {
+    const user = testEnv.authenticatedContext('user-regular')
+    await assertFails(
+      addDoc(collection(user.firestore(), 'audit_log'), {
+        action: 'account.deleted',
+        performedBy: 'user-regular',
+        targetId: 'altro-utente',
+        timestamp: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('un timestamp non generato dal server viene rifiutato', async () => {
+    const adminUid = 'admin-user'
+    await setupAdminUser(adminUid)
+    const admin = testEnv.authenticatedContext(adminUid)
+    await assertFails(
+      addDoc(collection(admin.firestore(), 'audit_log'), {
+        action: 'library.created',
+        performedBy: adminUid,
+        targetId: 'classe-1',
+        timestamp: new Date(),
+      }),
+    )
+  })
+
+  it('nessun client, admin incluso, può modificare o eliminare una voce di audit log', async () => {
+    const adminUid = 'admin-user'
+    await setupAdminUser(adminUid)
+    const admin = testEnv.authenticatedContext(adminUid)
+    const ref = doc(admin.firestore(), 'audit_log', 'entry-1')
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'audit_log', 'entry-1'), {
+        action: 'library.created',
+        performedBy: adminUid,
+        targetId: 'classe-1',
+        timestamp: Timestamp.now(),
+      })
+    })
+    await assertFails(updateDoc(ref, { action: 'library.deleted' }))
+    await assertFails(setDoc(ref, { action: 'library.deleted' }, { merge: true }))
+  })
+})
+
+describe('Anti-flood chat — limite basato sul contatore del member doc', () => {
+  it('il primo messaggio di un membro (senza contatore pregresso) viene accettato', async () => {
+    const memberUid = 'member-1'
+    await setupLobby('lobby-1', memberUid)
+    const user = testEnv.authenticatedContext(memberUid)
+    await assertSucceeds(
+      addDoc(collection(user.firestore(), 'lobbies', 'lobby-1', 'messages'), {
+        senderId: memberUid,
+        content: 'Primo messaggio',
+        sentAt: new Date(),
+      }),
+    )
+  })
+
+  it('un aggiornamento del contatore con aritmetica non valida viene rifiutato', async () => {
+    const memberUid = 'member-1'
+    await setupLobby('lobby-1', memberUid)
+    const user = testEnv.authenticatedContext(memberUid)
+    const memberRef = doc(user.firestore(), 'lobbies', 'lobby-1', 'members', memberUid)
+    await assertSucceeds(updateDoc(memberRef, { msgCount: 1, msgWindowStart: serverTimestamp() }))
+    await assertFails(updateDoc(memberRef, { msgCount: 5 }))
+    await assertSucceeds(updateDoc(memberRef, { msgCount: 2 }))
+  })
+
+  it('oltre 10 messaggi nella stessa finestra di 60s vengono rifiutati', async () => {
+    const memberUid = 'member-1'
+    await setupLobby('lobby-1', memberUid)
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'lobbies', 'lobby-1', 'members', memberUid), {
+        msgCount: 10,
+        msgWindowStart: Timestamp.now(),
+      })
+    })
+    const user = testEnv.authenticatedContext(memberUid)
+    await assertFails(
+      addDoc(collection(user.firestore(), 'lobbies', 'lobby-1', 'messages'), {
+        senderId: memberUid,
+        content: 'Flood',
+        sentAt: new Date(),
+      }),
+    )
+  })
+
+  it('dopo che la finestra di 60s è scaduta, l\'invio riprende anche con contatore al massimo', async () => {
+    const memberUid = 'member-1'
+    await setupLobby('lobby-1', memberUid)
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'lobbies', 'lobby-1', 'members', memberUid), {
+        msgCount: 10,
+        msgWindowStart: Timestamp.fromMillis(Date.now() - 120_000),
+      })
+    })
+    const user = testEnv.authenticatedContext(memberUid)
+    await assertSucceeds(
+      addDoc(collection(user.firestore(), 'lobbies', 'lobby-1', 'messages'), {
+        senderId: memberUid,
+        content: 'Dopo la finestra',
+        sentAt: new Date(),
+      }),
+    )
   })
 })

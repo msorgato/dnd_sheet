@@ -21,9 +21,13 @@ Le regole di sicurezza Firestore SHALL permettere l'accesso a una lobby e alle s
 - **WHEN** un utente autenticato che non è membro di una lobby tenta di leggere `lobbies/{lobbyId}/messages`
 - **THEN** le regole SHALL rifiutare la lettura
 
-### Requirement: Audit log accessibile solo in lettura admin
-Le regole di sicurezza Firestore SHALL permettere la sola lettura di `audit_log/{document=**}` agli utenti admin, senza consentire alcuna scrittura diretta da client.
+### Requirement: Audit log in lettura solo admin, in scrittura solo `create` validato
+Le regole di sicurezza Firestore SHALL permettere la lettura di `audit_log/{document=**}` ai soli utenti admin, e la scrittura ai client solo in forma di `create` con schema validato (`performedBy` uguale all'autore autenticato, `timestamp` uguale al timestamp del server, azione ammessa in base al ruolo), senza mai permettere `update` o `delete`.
 
-#### Scenario: Nessun client, admin incluso, può scrivere direttamente nell'audit log
-- **WHEN** un utente admin autenticato tenta una scrittura diretta (non tramite Cloud Function) su `audit_log`
-- **THEN** le regole SHALL rifiutare la scrittura
+#### Scenario: Una voce di audit log ben formata viene accettata
+- **WHEN** un admin autenticato crea una voce con `action` di libreria, `performedBy` pari al proprio uid e `timestamp` generato dal server
+- **THEN** le regole SHALL accettare la scrittura
+
+#### Scenario: Nessun client può alterare una voce di audit log dopo la creazione
+- **WHEN** un utente admin autenticato tenta un `update` o `delete` su un documento esistente in `audit_log`
+- **THEN** le regole SHALL rifiutare l'operazione
