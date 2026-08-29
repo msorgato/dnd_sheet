@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+/*
+ * Variabili semantiche di tema, applicate via `data-theme` sull'elemento radice.
+ * "crimson" (default) è il tema a dominante rossa richiesto per l'identità D&D,
+ * distinto dai temi di pathfinder_sheet. "obsidian" è una seconda variante fredda,
+ * utile a verificare che lo switch di tema funzioni correttamente.
+ */
+:root,
+[data-theme='crimson'] {
+  --theme-bg: #1a0a0a;
+  --theme-bg-elev: #241010;
+  --theme-surface: #2e1414;
+  --theme-border: #472020;
+
+  --theme-accent: #dc2626;
+  --theme-accent-bright: #f87171;
+
+  --theme-text: #f5e9e4;
+  --theme-text-soft: #d9c4bd;
+  --theme-text-mute: #9c7c76;
+
+  --theme-danger: #ef4444;
+  --theme-hp-high: #4ade80;
+  --theme-hp-mid: #facc15;
+  --theme-hp-low: #ef4444;
+}
+
+[data-theme='obsidian'] {
+  --theme-bg: #0b0f14;
+  --theme-bg-elev: #121820;
+  --theme-surface: #182029;
+  --theme-border: #2a3540;
+
+  --theme-accent: #14b8a6;
+  --theme-accent-bright: #5eead4;
+
+  --theme-text: #e6edf3;
+  --theme-text-soft: #b9c4cd;
+  --theme-text-mute: #6b7785;
+
+  --theme-danger: #f87171;
+  --theme-hp-high: #4ade80;
+  --theme-hp-mid: #facc15;
+  --theme-hp-low: #f87171;
+}
+
+:root {
+  --theme-font-display: 'Pirata One', Georgia, serif;
+  --theme-font-body: 'Crimson Text', Georgia, serif;
+}
+
+body {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+  font-family: var(--theme-font-body);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--theme-font-display);
+}
